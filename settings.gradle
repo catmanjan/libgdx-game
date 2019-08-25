@@ -1,0 +1,2 @@
+include ':server', ':shared'
+include 'desktop', 'android', 'html', 'core'
