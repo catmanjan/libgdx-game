@@ -12,8 +12,9 @@ public class Entity implements Transferable<Entity> {
     public Vector3 position;
     public Vector3 direction;
     public Vector3 velocity;
-    public boolean run;
-    public boolean crouch;
+    public boolean jump;
+    public boolean shoot;
+    public int team;
 
     @Override
     public void serialize(Serializer serializer) throws SerializationException {
@@ -27,8 +28,9 @@ public class Entity implements Transferable<Entity> {
                 .serializeFloat(velocity.x)
                 .serializeFloat(velocity.y)
                 .serializeFloat(velocity.z)
-                .serializeBoolean(run)
-                .serializeBoolean(crouch);
+                .serializeBoolean(jump)
+                .serializeBoolean(shoot)
+                .serializeInt(team);
     }
 
     @Override
@@ -38,8 +40,9 @@ public class Entity implements Transferable<Entity> {
         entity.position = new Vector3(deserializer.deserializeFloat(), deserializer.deserializeFloat(), deserializer.deserializeFloat());
         entity.direction = new Vector3(deserializer.deserializeFloat(), deserializer.deserializeFloat(), deserializer.deserializeFloat());
         entity.velocity = new Vector3(deserializer.deserializeFloat(), deserializer.deserializeFloat(), deserializer.deserializeFloat());
-        entity.run = deserializer.deserializeBoolean();
-        entity.crouch = deserializer.deserializeBoolean();
+        entity.jump = deserializer.deserializeBoolean();
+        entity.shoot = deserializer.deserializeBoolean();
+        entity.team = deserializer.deserializeInt();
 
         return entity;
     }

@@ -3,17 +3,20 @@ package com.catmanjan.bsp;
 import com.badlogic.gdx.ApplicationListener;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.InputProcessor;
 import com.badlogic.gdx.assets.AssetManager;
 import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.PerspectiveCamera;
 import com.badlogic.gdx.graphics.g3d.Environment;
 import com.badlogic.gdx.graphics.g3d.Model;
 import com.badlogic.gdx.graphics.g3d.ModelBatch;
 import com.badlogic.gdx.graphics.g3d.ModelInstance;
 import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
-import com.badlogic.gdx.graphics.g3d.model.Node;
-import com.badlogic.gdx.graphics.g3d.model.NodePart;
-import com.badlogic.gdx.graphics.g3d.utils.DepthShaderProvider;
+import com.badlogic.gdx.graphics.g3d.utils.AnimationController;
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.utils.ObjectMap;
+import com.badlogic.gdx.utils.TimeUtils;
+import com.catmanjan.bsp.shared.Constants;
 import com.catmanjan.bsp.shared.Snapshot;
 import com.catmanjan.bsp.shared.Entity;
 import com.catmanjan.bsp.shared.UserCommand;
@@ -24,57 +27,46 @@ import com.github.czyzby.websocket.WebSockets;
 import com.github.czyzby.websocket.net.ExtendedNet;
 import com.github.czyzby.websocket.serialization.impl.ManualSerializer;
 
-import java.util.HashMap;
-
-public class MyGdxGame implements ApplicationListener {
-
+public class MyGdxGame implements ApplicationListener, InputProcessor {
     private AssetManager assetManager;
     private boolean loading;
 
-    private ChaseCamera camera;
-    private HashMap<String, EntityModel> entityModels = new HashMap<>();
+    private PerspectiveCamera perspectiveCamera;
+    private ObjectMap<String, EntityModel> entityModels = new ObjectMap<>();
     private ModelBatch modelBatch;
-    private ModelBatch shadowBatch;
-    private Model model;
+    private Model blueSoldier;
+    private Model redSoldier;
     private ModelInstance level;
     private Environment environment;
-    private DirectionalShadowLight shadowLight;
 
     private WebSocket socket;
 
+    private EntityModel localPlayerEntityModel;
+    private Vector3 localPlayerVelocity = new Vector3();
     private Vector3 localPlayerDirection = new Vector3();
-    private Vector3 localPlayerPosition = new Vector3();
 
-    float yOffset = 6;//8
-    float zOffset = -9;//-12
-    float blockRadiusForFrustrumCulling = 11;//(float) Math.sqrt(10 * 10 + 10 * 10);
+    private long lastServerUpdate = 0;
+
+    private Vector3 tmp = new Vector3();
 
     @Override
     public void create() {
-        camera = new ChaseCamera(67, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-        camera.transform.setToTranslation(Vector3.Zero);
-        camera.position.set(yOffset, yOffset, zOffset);
-        camera.desiredLocation.set(0, yOffset, zOffset);
-        camera.targetOffset.set(0, 1, 0);
-        camera.near = 1;
-        camera.far = 100;
-        camera.acceleration = 100;
-        camera.rotationSpeed = 0;
+        perspectiveCamera = new PerspectiveCamera(67, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
+        perspectiveCamera.near = 1;
+        perspectiveCamera.far = 100;
 
         assetManager = new AssetManager();
-        assetManager.load("robot.g3dj", Model.class);
+        assetManager.load("blue_soldier.g3dj", Model.class);
+        assetManager.load("red_soldier.g3dj", Model.class);
+        assetManager.load("assault_combat_idle.g3dj", Model.class);
+        assetManager.load("assault_combat_run.g3dj", Model.class);
         assetManager.load("level.g3dj", Model.class);
+
         loading = true;
 
         modelBatch = new ModelBatch();
-        shadowBatch = new ModelBatch(new DepthShaderProvider());
-        shadowLight = new DirectionalShadowLight(1024, 1024, 100f, 100f, 1f, 100f);
-        shadowLight.set(0.3f, 0.3f, 0.3f, 0.5f, -0.5f, 0.5f);
         environment = new Environment();
         environment.set(new ColorAttribute(ColorAttribute.AmbientLight, 0.75f, 0.75f, 0.75f, 1f));
-        environment.set(new ColorAttribute(ColorAttribute.Fog, 1.0f, 1.0f, 1.0f, 1f));
-        environment.add(shadowLight);
-        environment.shadowMap = shadowLight;
 
         ManualSerializer serializer = new ManualSerializer();
         serializer.register(new Entity());
@@ -86,54 +78,60 @@ public class MyGdxGame implements ApplicationListener {
 
             @Override
             public boolean handle(WebSocket webSocket, Snapshot snapshot) {
-                for (Entity entity : snapshot.entities) {
-                    if (entity.id.equals(snapshot.receiverId)) {
-                        localPlayerPosition = entity.position;
-                    }
+                lastServerUpdate = TimeUtils.millis();
 
+                for (Entity entity : snapshot.entities) {
                     EntityModel entityModel;
 
                     if (entityModels.containsKey(entity.id)) {
                         entityModel = entityModels.get(entity.id);
                     } else {
-                        entityModel = new EntityModel(model);
+                        if (entity.team == 0) {
+                            entityModel = new EntityModel(blueSoldier, entity.position, entity.direction);
+                        } else {
+                            entityModel = new EntityModel(redSoldier, entity.position, entity.direction);
+                        }
 
                         entityModels.put(entity.id, entityModel);
                     }
 
-                    if (entity.velocity.isZero()) {
-                        if (entity.crouch) {
-                            entityModel.animationController.animate("crouch", -1, 1f, null, 0.2f);
-                        } else {
-                            entityModel.animationController.animate("idle", -1, 1f, null, 0.2f);
-                        }
-                    } else {
-                        if (entity.crouch) {
-                            entityModel.animationController.animate("crawl", -1, 1f, null, 0.2f);
-                        } else if (entity.run) {
-                            entityModel.animationController.animate("run", -1, 1f, null, 0.2f);
-                        } else {
-                            entityModel.animationController.animate("walk", -1, 1f, null, 0.2f);
-                        }
-                    }
+                    entityModel.position = entity.position;
+                    entityModel.direction = entity.direction;
 
-                    entityModel.modelInstance.transform.setToRotation(Vector3.Z, entity.direction).trn(entity.position);
+                    if (entity.velocity.isZero()) {
+                        entityModel.animationController.animate("idle", -1, 1f, null, 0.2f);
+                    } else {
+                        entityModel.animationController.animate("shoot", -1, 1f, null, 0.2f);
+                    }
                 }
+
+                localPlayerEntityModel = entityModels.get(snapshot.receiverId);
 
                 return true;
             }
         });
 
-        socket = ExtendedNet.getNet().newWebSocket("icogspjan", 8000);
+        socket = ExtendedNet.getNet().newWebSocket("catmanjan.australiaeast.cloudapp.azure.com", 8000);
         socket.setSerializer(serializer);
         socket.addListener(handler);
         socket.connect();
+
+        Gdx.input.setInputProcessor(this);
+        Gdx.input.setCursorCatched(true);
     }
 
     private void doneLoading() {
-        model = assetManager.get("robot.g3dj", Model.class);
-        Model levelModel = assetManager.get("level.g3dj", Model.class);
-        level = new ModelInstance(levelModel);
+        blueSoldier = assetManager.get("blue_soldier.g3dj", Model.class);
+        redSoldier = assetManager.get("red_soldier.g3dj", Model.class);
+        level = new ModelInstance(assetManager.get("level.g3dj", Model.class));
+
+        Model idle = assetManager.get("assault_combat_idle.g3dj", Model.class);
+        Model run = assetManager.get("assault_combat_run.g3dj", Model.class);
+
+        ModelHelpers.copyAnimationsFromModel(blueSoldier, idle, "idle");
+        ModelHelpers.copyAnimationsFromModel(blueSoldier, run, "shoot");
+        ModelHelpers.copyAnimationsFromModel(redSoldier, idle, "idle");
+        ModelHelpers.copyAnimationsFromModel(redSoldier, run, "shoot");
 
         loading = false;
     }
@@ -149,65 +147,62 @@ public class MyGdxGame implements ApplicationListener {
             return;
         }
 
-        // input
-        Vector3 localPlayerVelocity = new Vector3();
+        float alpha = (float)TimeUtils.timeSinceMillis(lastServerUpdate) / (float)Constants.TICK_INTERVAL;
 
+        for (EntityModel entityModel : entityModels.values()) {
+            entityModel.update(alpha);
+        }
+
+        // input
         Vector3 forward = new Vector3();
-        forward.set(camera.direction);
+        forward.set(perspectiveCamera.direction);
         forward.y = 0;
         Vector3 right = new Vector3();
-        right.set(camera.direction.crs(camera.up));
+        right.set(perspectiveCamera.direction);
+        right.crs(perspectiveCamera.up);
         right.y = 0;
+
+        localPlayerVelocity.setZero();
 
         if (Gdx.input.isKeyPressed(Input.Keys.W) && Gdx.input.isKeyPressed(Input.Keys.A)) {
             localPlayerVelocity.set(forward).add(right.scl(-1)).nor();
-            localPlayerDirection.set(forward).add(right).nor();
         } else if (Gdx.input.isKeyPressed(Input.Keys.W) && Gdx.input.isKeyPressed(Input.Keys.D)) {
             localPlayerVelocity.set(forward).add(right).nor();
-            localPlayerDirection.set(forward).add(right).nor();
         } else if (Gdx.input.isKeyPressed(Input.Keys.S) && Gdx.input.isKeyPressed(Input.Keys.D)) {
             localPlayerVelocity.set(forward).add(right.scl(-1)).nor().scl(-1);
-            localPlayerDirection.set(forward).add(right).nor().scl(-1);
         } else if (Gdx.input.isKeyPressed(Input.Keys.S) && Gdx.input.isKeyPressed(Input.Keys.A)) {
             localPlayerVelocity.set(forward).add(right).nor().scl(-1);
-            localPlayerDirection.set(forward).add(right).nor().scl(-1);
         } else if (Gdx.input.isKeyPressed(Input.Keys.W)) {
             localPlayerVelocity.set(forward).nor();
-            localPlayerDirection.set(forward).nor();
         } else if (Gdx.input.isKeyPressed(Input.Keys.S)) {
             localPlayerVelocity.set(forward).nor().scl(-1);
-            localPlayerDirection.set(forward).nor().scl(-1);
         } else if (Gdx.input.isKeyPressed(Input.Keys.A)) {
             localPlayerVelocity.set(right).nor().scl(-1);
-            localPlayerDirection.set(right).nor().scl(-1);
         }  else if (Gdx.input.isKeyPressed(Input.Keys.D)) {
             localPlayerVelocity.set(right).nor();
-            localPlayerDirection.set(right).nor();
         }
+
+        localPlayerDirection.set(perspectiveCamera.direction);
+        localPlayerDirection.rotate(Vector3.Y, 90);
+        localPlayerDirection.crs(perspectiveCamera.up);
+        localPlayerDirection.nor();
+        localPlayerDirection.y = 0;
 
         // networking
         UserCommand command = new UserCommand();
         command.velocity = localPlayerVelocity;
         command.direction = localPlayerDirection;
-        command.run = !Gdx.input.isKeyPressed(Input.Keys.SHIFT_LEFT);
-        command.crouch = Gdx.input.isKeyPressed(Input.Keys.C);
+        command.shoot = Gdx.input.isKeyPressed(Input.Buttons.LEFT) || Gdx.input.isKeyPressed(Input.Buttons.RIGHT);
+        command.jump = Gdx.input.isKeyPressed(Input.Keys.SPACE);
 
         if (!loading && socket.isOpen()) {
             socket.send(command);
         }
 
-        camera.transform.setToTranslation(localPlayerPosition);
-        camera.position.y = localPlayerPosition.y + yOffset;
-        camera.update();
-
-        Node workbenchNode = level.nodes.get(0);
-
-        for (Node childNode : workbenchNode.getChildren()) {
-            boolean enable = camera.frustum.sphereInFrustum(childNode.translation, blockRadiusForFrustrumCulling);
-
-            for (NodePart childNodePart : childNode.parts) {
-                childNodePart.enabled = enable;
-            }
+        if (localPlayerEntityModel != null) {
+            perspectiveCamera.position.set(localPlayerEntityModel.realPosition);
+            perspectiveCamera.position.add(0, 8.5f, 0);
+            perspectiveCamera.update();
         }
 
         for (EntityModel entityModel : entityModels.values()) {
@@ -219,20 +214,7 @@ public class MyGdxGame implements ApplicationListener {
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT | GL20.GL_DEPTH_BUFFER_BIT);
         Gdx.gl.glEnable(GL20.GL_DEPTH_TEST);
 
-        shadowLight.begin(localPlayerPosition, camera.direction);
-        shadowBatch.begin(shadowLight.getCamera());
-        for (EntityModel entityModel : entityModels.values()) {
-            shadowBatch.render(entityModel.modelInstance, environment);
-        }
-        shadowBatch.render(level, environment);
-        shadowBatch.end();
-        shadowLight.end();
-
-        if (Gdx.input.isKeyPressed(Input.Keys.L)) {
-            modelBatch.begin(shadowLight.getCamera());
-        } else {
-            modelBatch.begin(camera);
-        }
+        modelBatch.begin(perspectiveCamera);
         for (EntityModel entityModel : entityModels.values()) {
             modelBatch.render(entityModel.modelInstance, environment);
         }
@@ -241,14 +223,9 @@ public class MyGdxGame implements ApplicationListener {
     }
 
     @Override
-    public void dispose() {
-        WebSockets.closeGracefully(socket);
-    }
-
-    @Override
     public void resize(int width, int height) {
-        camera.viewportWidth = width;
-        camera.viewportHeight = height;
+        perspectiveCamera.viewportWidth = width;
+        perspectiveCamera.viewportHeight = height;
     }
 
     @Override
@@ -259,5 +236,96 @@ public class MyGdxGame implements ApplicationListener {
     @Override
     public void resume() {
 
+    }
+
+    @Override
+    public boolean keyDown(int keycode) {
+        if (keycode == Input.Keys.ESCAPE) {
+            Gdx.input.setCursorCatched(false);
+        }
+
+        return true;
+    }
+
+    @Override
+    public boolean keyUp(int keycode) {
+        return false;
+    }
+
+    @Override
+    public boolean keyTyped(char character) {
+        return false;
+    }
+
+    @Override
+    public boolean touchDown(int screenX, int screenY, int pointer, int button) {
+        Gdx.input.setCursorCatched(true);
+
+        return true;
+    }
+
+    @Override
+    public boolean touchUp(int screenX, int screenY, int pointer, int button) {
+        return false;
+    }
+
+    @Override
+    public boolean touchDragged(int screenX, int screenY, int pointer) {
+        mouseLook();
+
+        return true;
+    }
+
+    @Override
+    public boolean mouseMoved(int screenX, int screenY) {
+        mouseLook();
+
+        return true;
+    }
+
+    private void mouseLook() {
+        if (Gdx.input.isCursorCatched()) {
+            float deltaX = -Gdx.input.getDeltaX() * 0.5f;
+            float deltaY = -Gdx.input.getDeltaY() * 0.5f;
+            perspectiveCamera.direction.rotate(perspectiveCamera.up, deltaX);
+            tmp.set(perspectiveCamera.direction).crs(perspectiveCamera.up).nor();
+            perspectiveCamera.direction.rotate(tmp, deltaY);
+        }
+    }
+
+    @Override
+    public boolean scrolled(int amount) {
+        return false;
+    }
+
+    @Override
+    public void dispose() {
+        WebSockets.closeGracefully(socket);
+    }
+
+    class EntityModel {
+        public ModelInstance modelInstance;
+        public AnimationController animationController;
+        // set every tick
+        public Vector3 position;
+        public Vector3 direction;
+        // lerping
+        public Vector3 realPosition;
+        public Vector3 realDirection;
+
+        public EntityModel(Model model, Vector3 position, Vector3 direction) {
+            this.position = this.realPosition = position;
+            this.direction = this.realDirection = direction;
+
+            modelInstance = new ModelInstance(model);
+            animationController = new AnimationController(modelInstance);
+        }
+
+        public void update(float alpha) {
+            realPosition.lerp(position, alpha);
+            realDirection.lerp(direction, alpha);
+
+            modelInstance.transform.setToRotation(Vector3.Z, realDirection).trn(realPosition);
+        }
     }
 }

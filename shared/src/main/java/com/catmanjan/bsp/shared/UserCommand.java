@@ -10,8 +10,8 @@ public class UserCommand implements Transferable<UserCommand> {
 
     public Vector3 velocity;
     public Vector3 direction;
-    public boolean run;
-    public boolean crouch;
+    public boolean shoot;
+    public boolean jump;
 
     @Override
     public void serialize(Serializer serializer) throws SerializationException {
@@ -21,8 +21,8 @@ public class UserCommand implements Transferable<UserCommand> {
                 .serializeFloat(direction.x)
                 .serializeFloat(direction.y)
                 .serializeFloat(direction.z)
-                .serializeBoolean(run)
-                .serializeBoolean(crouch);
+                .serializeBoolean(shoot)
+                .serializeBoolean(jump);
     }
 
     @Override
@@ -30,8 +30,8 @@ public class UserCommand implements Transferable<UserCommand> {
         UserCommand userCommand = new UserCommand();
         userCommand.velocity = new Vector3(deserializer.deserializeFloat(), deserializer.deserializeFloat(), deserializer.deserializeFloat());
         userCommand.direction = new Vector3(deserializer.deserializeFloat(), deserializer.deserializeFloat(), deserializer.deserializeFloat());
-        userCommand.run = deserializer.deserializeBoolean();
-        userCommand.crouch = deserializer.deserializeBoolean();
+        userCommand.shoot = deserializer.deserializeBoolean();
+        userCommand.jump = deserializer.deserializeBoolean();
 
         return userCommand;
     }
