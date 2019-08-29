@@ -1,6 +1,16 @@
-sourceCompatibility = 1.8
-apply plugin: 'java-library'
+apply plugin: "java"
 
-dependencies {
-    implementation fileTree(dir: 'libs', include: ['*.jar'])
+sourceCompatibility = 1.8
+sourceSets.main.java.srcDirs = [ "src/" ]
+sourceSets.main.resources.srcDirs = ["../android/assets"]
+
+project.ext.mainClassName = "com.catmanjan.bsp.server.ServerLauncher"
+project.ext.assetsDir = new File("../android/assets")
+
+task run(dependsOn: classes, type: JavaExec) {
+    main = project.mainClassName
+    classpath = sourceSets.main.runtimeClasspath
+    standardInput = System.in
+    workingDir = project.assetsDir
+    ignoreExitValue = true
 }
