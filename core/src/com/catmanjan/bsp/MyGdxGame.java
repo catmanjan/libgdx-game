@@ -14,8 +14,14 @@ import com.badlogic.gdx.graphics.g3d.Model;
 import com.badlogic.gdx.graphics.g3d.ModelBatch;
 import com.badlogic.gdx.graphics.g3d.ModelInstance;
 import com.badlogic.gdx.graphics.g3d.attributes.ColorAttribute;
+import com.badlogic.gdx.graphics.g3d.model.Animation;
+import com.badlogic.gdx.graphics.g3d.model.Node;
+import com.badlogic.gdx.graphics.g3d.model.NodeAnimation;
+import com.badlogic.gdx.graphics.g3d.model.NodeKeyframe;
 import com.badlogic.gdx.graphics.g3d.utils.AnimationController;
+import com.badlogic.gdx.math.Quaternion;
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ObjectMap;
 import com.badlogic.gdx.utils.TimeUtils;
 import com.catmanjan.bsp.shared.Constants;
@@ -34,7 +40,7 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
     private boolean loading;
 
     private PerspectiveCamera perspectiveCamera;
-    private ObjectMap<String, EntityModel> entityModels = new ObjectMap<>();
+    private ObjectMap<String, LocalEntity> localEntities = new ObjectMap<>();
     private ModelBatch modelBatch;
     private Model soldierBlue;
     private Model soldierBlueLocal;
@@ -48,7 +54,7 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
 
     private WebSocket socket;
 
-    private EntityModel localPlayerEntityModel;
+    private LocalEntity localPlayerEntityModel;
     private Vector3 localPlayerVelocity = new Vector3();
     private Vector3 localPlayerDirection = new Vector3();
 
@@ -97,12 +103,12 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
                 lastServerUpdate = TimeUtils.millis();
 
                 for (Entity entity : snapshot.entities) {
-                    EntityModel entityModel;
+                    LocalEntity localEntity;
 
-                    if (entityModels.containsKey(entity.id)) {
-                        entityModel = entityModels.get(entity.id);
+                    if (localEntities.containsKey(entity.id)) {
+                        localEntity = localEntities.get(entity.id);
                     } else {
-                        Model playerModel = null;
+                        Model playerModel;
 
                         if (entity.team == 0) {
                             if (entity.id.equals(snapshot.receiverId)) {
@@ -118,21 +124,21 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
                             }
                         }
 
-                        entityModel = new EntityModel(playerModel, entity.position, entity.direction);
-                        entityModels.put(entity.id, entityModel);
+                        localEntity = new LocalEntity(playerModel, entity.position, entity.direction);
+                        localEntities.put(entity.id, localEntity);
                     }
 
-                    entityModel.position = entity.position;
-                    entityModel.direction = entity.direction;
+                    localEntity.position = entity.position;
+                    localEntity.direction = entity.direction;
 
                     if (entity.velocity.isZero()) {
-                        entityModel.animationController.animate("idle", -1, 1f, null, 0.2f);
+                        localEntity.animationController.animate("idle", -1, 1f, null, 0.2f);
                     } else {
-                        entityModel.animationController.animate("shoot", -1, 1f, null, 0.2f);
+                        localEntity.animationController.animate("shoot", -1, 1f, null, 0.2f);
                     }
                 }
 
-                localPlayerEntityModel = entityModels.get(snapshot.receiverId);
+                localPlayerEntityModel = localEntities.get(snapshot.receiverId);
 
                 return true;
             }
@@ -157,14 +163,14 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
         Model idle = assetManager.get("soldierIdle.g3dj", Model.class);
         Model run = assetManager.get("soldierRun.g3dj", Model.class);
 
-        ModelHelpers.copyAnimationsFromModel(soldierBlue, idle, "idle");
-        ModelHelpers.copyAnimationsFromModel(soldierBlue, run, "shoot");
-        ModelHelpers.copyAnimationsFromModel(soldierBlueLocal, idle, "idle");
-        ModelHelpers.copyAnimationsFromModel(soldierBlueLocal, run, "shoot");
-        ModelHelpers.copyAnimationsFromModel(soldierRed, idle, "idle");
-        ModelHelpers.copyAnimationsFromModel(soldierRed, run, "shoot");
-        ModelHelpers.copyAnimationsFromModel(soldierRedLocal, idle, "idle");
-        ModelHelpers.copyAnimationsFromModel(soldierRedLocal, run, "shoot");
+        copyAnimationsFromModel(soldierBlue, idle, "idle");
+        copyAnimationsFromModel(soldierBlue, run, "shoot");
+        copyAnimationsFromModel(soldierBlueLocal, idle, "idle");
+        copyAnimationsFromModel(soldierBlueLocal, run, "shoot");
+        copyAnimationsFromModel(soldierRed, idle, "idle");
+        copyAnimationsFromModel(soldierRed, run, "shoot");
+        copyAnimationsFromModel(soldierRedLocal, idle, "idle");
+        copyAnimationsFromModel(soldierRedLocal, run, "shoot");
 
         loading = false;
     }
@@ -182,7 +188,7 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
 
         float alpha = (float)TimeUtils.timeSinceMillis(lastServerUpdate) / (float)Constants.TICK_INTERVAL;
 
-        for (EntityModel entityModel : entityModels.values()) {
+        for (LocalEntity entityModel : localEntities.values()) {
             entityModel.update(alpha);
         }
 
@@ -238,7 +244,7 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
             perspectiveCamera.update();
         }
 
-        for (EntityModel entityModel : entityModels.values()) {
+        for (LocalEntity entityModel : localEntities.values()) {
             entityModel.animationController.update(Gdx.graphics.getDeltaTime());
         }
 
@@ -248,7 +254,7 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
         Gdx.gl.glEnable(GL20.GL_DEPTH_TEST);
 
         modelBatch.begin(perspectiveCamera);
-        for (EntityModel entityModel : entityModels.values()) {
+        for (LocalEntity entityModel : localEntities.values()) {
             modelBatch.render(entityModel.modelInstance, environment);
         }
         modelBatch.render(level, environment);
@@ -340,17 +346,90 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
         WebSockets.closeGracefully(socket);
     }
 
-    class EntityModel {
-        public ModelInstance modelInstance;
-        public AnimationController animationController;
-        // set every tick
-        public Vector3 position;
-        public Vector3 direction;
-        // lerping
-        public Vector3 realPosition;
-        public Vector3 realDirection;
+    private void copyAnimationsFromModel(Model targetModel, Model animationModel, String name){
+        for (Animation sourceAnimation : animationModel.animations) {
+            Animation targetAnimation = new Animation();
+            targetAnimation.id = name;
+            targetAnimation.duration = sourceAnimation.duration;
 
-        public EntityModel(Model model, Vector3 position, Vector3 direction) {
+            for (final Node node : animationModel.nodes) {
+                copyAnimationsFromNodes(targetAnimation, sourceAnimation, node, targetModel);
+            }
+
+            if (targetAnimation.nodeAnimations.size > 0) {
+                targetModel.animations.add(targetAnimation);
+            }
+        }
+    }
+
+
+    private void copyAnimationsFromNodes(Animation targetAnimation, Animation sourceAnimation, Node node, Model model) {
+        if (node.hasChildren()) {
+            for (final Node child : node.getChildren()) {
+                copyAnimationsFromNodes(targetAnimation, sourceAnimation, child, model);
+            }
+        }
+
+        final Node modelNode = model.getNode(node.id);
+
+        if (modelNode == null) {
+            return;
+        }
+
+        NodeAnimation sourceNodeAnimation = null;
+
+        // look for existing node animation
+        for (final NodeAnimation tmp : sourceAnimation.nodeAnimations) {
+            if (tmp.node.id.equals(node.id)) {
+                sourceNodeAnimation = tmp;
+                break;
+            }
+        }
+
+        NodeAnimation newNodeAnimation = new NodeAnimation();
+        newNodeAnimation.node = modelNode;
+        newNodeAnimation.translation = new Array<>();
+        newNodeAnimation.rotation = new Array<>();
+        newNodeAnimation.scaling = new Array<>();
+
+        if (sourceNodeAnimation != null && sourceNodeAnimation.translation != null) {
+            for (final NodeKeyframe<Vector3> kf : sourceNodeAnimation.translation) {
+                newNodeAnimation.translation.add(new NodeKeyframe<>(kf.keytime, kf.value));
+            }
+        } else {
+            newNodeAnimation.translation.add(new NodeKeyframe<>(0, node.translation));
+        }
+
+        if (sourceNodeAnimation != null && sourceNodeAnimation.rotation != null) {
+            for (final NodeKeyframe<Quaternion> kf : sourceNodeAnimation.rotation) {
+                newNodeAnimation.rotation.add(new NodeKeyframe<>(kf.keytime, kf.value));
+            }
+        } else {
+            newNodeAnimation.rotation.add(new NodeKeyframe<>(0, node.rotation));
+        }
+
+        if (sourceNodeAnimation != null && sourceNodeAnimation.scaling != null) {
+            for (final NodeKeyframe<Vector3> kf : sourceNodeAnimation.scaling) {
+                newNodeAnimation.scaling.add(new NodeKeyframe<>(kf.keytime, kf.value));
+            }
+        } else {
+            newNodeAnimation.scaling.add(new NodeKeyframe<>(0, node.scale));
+        }
+
+        targetAnimation.nodeAnimations.add(newNodeAnimation);
+    }
+
+    class LocalEntity {
+        ModelInstance modelInstance;
+        AnimationController animationController;
+        // set every tick
+        Vector3 position;
+        Vector3 direction;
+        // lerping
+        Vector3 realPosition;
+        Vector3 realDirection;
+
+        LocalEntity(Model model, Vector3 position, Vector3 direction) {
             this.position = this.realPosition = position;
             this.direction = this.realDirection = direction;
 
@@ -358,7 +437,7 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
             animationController = new AnimationController(modelInstance);
         }
 
-        public void update(float alpha) {
+        void update(float alpha) {
             realPosition.lerp(position, alpha);
             realDirection.lerp(direction, alpha);
 
