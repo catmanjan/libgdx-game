@@ -7,6 +7,8 @@ import com.badlogic.gdx.InputProcessor;
 import com.badlogic.gdx.assets.AssetManager;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.PerspectiveCamera;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g3d.Environment;
 import com.badlogic.gdx.graphics.g3d.Model;
 import com.badlogic.gdx.graphics.g3d.ModelBatch;
@@ -38,6 +40,9 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
     private Model redSoldier;
     private ModelInstance level;
     private Environment environment;
+    private BitmapFont fontRed;
+    private BitmapFont fontBlue;
+    private SpriteBatch spriteBatch;
 
     private WebSocket socket;
 
@@ -49,6 +54,9 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
 
     private Vector3 tmp = new Vector3();
 
+    private boolean chatting;
+    private String chatText;
+
     @Override
     public void create() {
         perspectiveCamera = new PerspectiveCamera(67, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
@@ -56,11 +64,15 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
         perspectiveCamera.far = 100;
 
         assetManager = new AssetManager();
-        assetManager.load("blue_soldier.g3dj", Model.class);
-        assetManager.load("red_soldier.g3dj", Model.class);
-        assetManager.load("assault_combat_idle.g3dj", Model.class);
-        assetManager.load("assault_combat_run.g3dj", Model.class);
+        assetManager.load("soldierBlue.g3dj", Model.class);
+        assetManager.load("soldierRed.g3dj", Model.class);
+        assetManager.load("soldierIdle.g3dj", Model.class);
+        assetManager.load("soldierRun.g3dj", Model.class);
         assetManager.load("level.g3dj", Model.class);
+
+        fontBlue = new BitmapFont(Gdx.files.internal("fontBlue.fnt"));
+        fontRed = new BitmapFont(Gdx.files.internal("fontRed.fnt"));
+        spriteBatch = new SpriteBatch();
 
         loading = true;
 
@@ -121,12 +133,12 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
     }
 
     private void doneLoading() {
-        blueSoldier = assetManager.get("blue_soldier.g3dj", Model.class);
-        redSoldier = assetManager.get("red_soldier.g3dj", Model.class);
+        blueSoldier = assetManager.get("soldierBlue.g3dj", Model.class);
+        redSoldier = assetManager.get("soldierRed.g3dj", Model.class);
         level = new ModelInstance(assetManager.get("level.g3dj", Model.class));
 
-        Model idle = assetManager.get("assault_combat_idle.g3dj", Model.class);
-        Model run = assetManager.get("assault_combat_run.g3dj", Model.class);
+        Model idle = assetManager.get("soldierIdle.g3dj", Model.class);
+        Model run = assetManager.get("soldierRun.g3dj", Model.class);
 
         ModelHelpers.copyAnimationsFromModel(blueSoldier, idle, "idle");
         ModelHelpers.copyAnimationsFromModel(blueSoldier, run, "shoot");
@@ -220,6 +232,10 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
         }
         modelBatch.render(level, environment);
         modelBatch.end();
+
+        spriteBatch.begin();
+        fontBlue.draw(spriteBatch, "hello", 0, fontBlue.getLineHeight());
+        spriteBatch.end();
     }
 
     @Override

@@ -1452,7 +1452,7 @@
 			"textures": [
 				{
 					"id": "Map #16",
-					"filename": "basic_soldier_red.png",
+					"filename": "soldierRed.png",
 					"type": "DIFFUSE"
 				}
 			]

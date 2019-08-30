@@ -1348,7 +1348,7 @@
 			"textures": [
 				{
 					"id": "_defaultMat", 
-					"filename": "_defaultMat.png", 
+					"filename": "defaultMat.png",
 					"type": "DIFFUSE"
 				}
 			]

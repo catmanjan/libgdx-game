@@ -10,6 +10,8 @@ public class DesktopLauncher {
 		CommonWebSockets.initiate();
 
 		LwjglApplicationConfiguration config = new LwjglApplicationConfiguration();
+		config.width = 1200;
+		config.height = 720;
 		new LwjglApplication(new MyGdxGame(), config);
 	}
 }
