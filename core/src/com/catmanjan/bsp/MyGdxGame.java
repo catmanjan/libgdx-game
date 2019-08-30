@@ -36,8 +36,10 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
     private PerspectiveCamera perspectiveCamera;
     private ObjectMap<String, EntityModel> entityModels = new ObjectMap<>();
     private ModelBatch modelBatch;
-    private Model blueSoldier;
-    private Model redSoldier;
+    private Model soldierBlue;
+    private Model soldierBlueLocal;
+    private Model soldierRed;
+    private Model soldierRedLocal;
     private ModelInstance level;
     private Environment environment;
     private BitmapFont fontRed;
@@ -60,12 +62,14 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
     @Override
     public void create() {
         perspectiveCamera = new PerspectiveCamera(67, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-        perspectiveCamera.near = 1;
+        perspectiveCamera.near = 0.1f;
         perspectiveCamera.far = 100;
 
         assetManager = new AssetManager();
         assetManager.load("soldierBlue.g3dj", Model.class);
+        assetManager.load("soldierBlueLocal.g3dj", Model.class);
         assetManager.load("soldierRed.g3dj", Model.class);
+        assetManager.load("soldierRedLocal.g3dj", Model.class);
         assetManager.load("soldierIdle.g3dj", Model.class);
         assetManager.load("soldierRun.g3dj", Model.class);
         assetManager.load("level.g3dj", Model.class);
@@ -98,12 +102,23 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
                     if (entityModels.containsKey(entity.id)) {
                         entityModel = entityModels.get(entity.id);
                     } else {
+                        Model playerModel = null;
+
                         if (entity.team == 0) {
-                            entityModel = new EntityModel(blueSoldier, entity.position, entity.direction);
+                            if (entity.id.equals(snapshot.receiverId)) {
+                                playerModel = soldierBlueLocal;
+                            } else {
+                                playerModel = soldierBlue;
+                            }
                         } else {
-                            entityModel = new EntityModel(redSoldier, entity.position, entity.direction);
+                            if (entity.id.equals(snapshot.receiverId)) {
+                                playerModel = soldierRedLocal;
+                            } else {
+                                playerModel = soldierRed;
+                            }
                         }
 
+                        entityModel = new EntityModel(playerModel, entity.position, entity.direction);
                         entityModels.put(entity.id, entityModel);
                     }
 
@@ -133,17 +148,23 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
     }
 
     private void doneLoading() {
-        blueSoldier = assetManager.get("soldierBlue.g3dj", Model.class);
-        redSoldier = assetManager.get("soldierRed.g3dj", Model.class);
+        soldierBlue = assetManager.get("soldierBlue.g3dj", Model.class);
+        soldierBlueLocal = assetManager.get("soldierBlueLocal.g3dj", Model.class);
+        soldierRed = assetManager.get("soldierRed.g3dj", Model.class);
+        soldierRedLocal = assetManager.get("soldierRedLocal.g3dj", Model.class);
         level = new ModelInstance(assetManager.get("level.g3dj", Model.class));
 
         Model idle = assetManager.get("soldierIdle.g3dj", Model.class);
         Model run = assetManager.get("soldierRun.g3dj", Model.class);
 
-        ModelHelpers.copyAnimationsFromModel(blueSoldier, idle, "idle");
-        ModelHelpers.copyAnimationsFromModel(blueSoldier, run, "shoot");
-        ModelHelpers.copyAnimationsFromModel(redSoldier, idle, "idle");
-        ModelHelpers.copyAnimationsFromModel(redSoldier, run, "shoot");
+        ModelHelpers.copyAnimationsFromModel(soldierBlue, idle, "idle");
+        ModelHelpers.copyAnimationsFromModel(soldierBlue, run, "shoot");
+        ModelHelpers.copyAnimationsFromModel(soldierBlueLocal, idle, "idle");
+        ModelHelpers.copyAnimationsFromModel(soldierBlueLocal, run, "shoot");
+        ModelHelpers.copyAnimationsFromModel(soldierRed, idle, "idle");
+        ModelHelpers.copyAnimationsFromModel(soldierRed, run, "shoot");
+        ModelHelpers.copyAnimationsFromModel(soldierRedLocal, idle, "idle");
+        ModelHelpers.copyAnimationsFromModel(soldierRedLocal, run, "shoot");
 
         loading = false;
     }
@@ -213,7 +234,7 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
 
         if (localPlayerEntityModel != null) {
             perspectiveCamera.position.set(localPlayerEntityModel.realPosition);
-            perspectiveCamera.position.add(0, 8.5f, 0);
+            perspectiveCamera.position.add(0, 8.2f, 0);
             perspectiveCamera.update();
         }
 
