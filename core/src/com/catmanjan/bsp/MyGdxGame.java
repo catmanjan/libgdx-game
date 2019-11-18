@@ -5,8 +5,10 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.InputProcessor;
 import com.badlogic.gdx.assets.AssetManager;
+import com.badlogic.gdx.assets.loaders.TextureLoader;
 import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.PerspectiveCamera;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g3d.Environment;
@@ -51,6 +53,7 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
     private BitmapFont fontRed;
     private BitmapFont fontBlue;
     private SpriteBatch spriteBatch;
+    private Texture crosshair;
 
     private WebSocket socket;
 
@@ -63,13 +66,17 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
     private Vector3 tmp = new Vector3();
 
     private boolean chatting;
-    private String chatText;
+    private String chatText = "";
+    private String chatLog = "";
 
     @Override
     public void create() {
         perspectiveCamera = new PerspectiveCamera(67, Gdx.graphics.getWidth(), Gdx.graphics.getHeight());
-        perspectiveCamera.near = 0.1f;
-        perspectiveCamera.far = 100;
+        perspectiveCamera.near = 1f;
+        perspectiveCamera.far = 1000;
+
+        TextureLoader.TextureParameter param = new TextureLoader.TextureParameter();
+        param.minFilter = Texture.TextureFilter.Linear;
 
         assetManager = new AssetManager();
         assetManager.load("soldierBlue.g3dj", Model.class);
@@ -79,6 +86,7 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
         assetManager.load("soldierIdle.g3dj", Model.class);
         assetManager.load("soldierRun.g3dj", Model.class);
         assetManager.load("level.g3dj", Model.class);
+        assetManager.load("crosshair118.png", Texture.class, param);
 
         fontBlue = new BitmapFont(Gdx.files.internal("fontBlue.fnt"));
         fontRed = new BitmapFont(Gdx.files.internal("fontRed.fnt"));
@@ -88,7 +96,7 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
 
         modelBatch = new ModelBatch();
         environment = new Environment();
-        environment.set(new ColorAttribute(ColorAttribute.AmbientLight, 0.75f, 0.75f, 0.75f, 1f));
+        environment.set(new ColorAttribute(ColorAttribute.AmbientLight, 1, 1, 1, 1f));
 
         ManualSerializer serializer = new ManualSerializer();
         serializer.register(new Entity());
@@ -101,6 +109,8 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
             @Override
             public boolean handle(WebSocket webSocket, Snapshot snapshot) {
                 lastServerUpdate = TimeUtils.millis();
+
+                chatLog = snapshot.chat;
 
                 for (Entity entity : snapshot.entities) {
                     LocalEntity localEntity;
@@ -144,7 +154,7 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
             }
         });
 
-        socket = ExtendedNet.getNet().newWebSocket("catmanjan.australiaeast.cloudapp.azure.com", 8000);
+        socket = ExtendedNet.getNet().newWebSocket("localhost", 8000);
         socket.setSerializer(serializer);
         socket.addListener(handler);
         socket.connect();
@@ -159,6 +169,7 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
         soldierRed = assetManager.get("soldierRed.g3dj", Model.class);
         soldierRedLocal = assetManager.get("soldierRedLocal.g3dj", Model.class);
         level = new ModelInstance(assetManager.get("level.g3dj", Model.class));
+        crosshair = assetManager.get("crosshair118.png", Texture.class);
 
         Model idle = assetManager.get("soldierIdle.g3dj", Model.class);
         Model run = assetManager.get("soldierRun.g3dj", Model.class);
@@ -192,6 +203,8 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
             entityModel.update(alpha);
         }
 
+        UserCommand command = new UserCommand();
+
         // input
         Vector3 forward = new Vector3();
         forward.set(perspectiveCamera.direction);
@@ -203,22 +216,39 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
 
         localPlayerVelocity.setZero();
 
-        if (Gdx.input.isKeyPressed(Input.Keys.W) && Gdx.input.isKeyPressed(Input.Keys.A)) {
-            localPlayerVelocity.set(forward).add(right.scl(-1)).nor();
-        } else if (Gdx.input.isKeyPressed(Input.Keys.W) && Gdx.input.isKeyPressed(Input.Keys.D)) {
-            localPlayerVelocity.set(forward).add(right).nor();
-        } else if (Gdx.input.isKeyPressed(Input.Keys.S) && Gdx.input.isKeyPressed(Input.Keys.D)) {
-            localPlayerVelocity.set(forward).add(right.scl(-1)).nor().scl(-1);
-        } else if (Gdx.input.isKeyPressed(Input.Keys.S) && Gdx.input.isKeyPressed(Input.Keys.A)) {
-            localPlayerVelocity.set(forward).add(right).nor().scl(-1);
-        } else if (Gdx.input.isKeyPressed(Input.Keys.W)) {
-            localPlayerVelocity.set(forward).nor();
-        } else if (Gdx.input.isKeyPressed(Input.Keys.S)) {
-            localPlayerVelocity.set(forward).nor().scl(-1);
-        } else if (Gdx.input.isKeyPressed(Input.Keys.A)) {
-            localPlayerVelocity.set(right).nor().scl(-1);
-        }  else if (Gdx.input.isKeyPressed(Input.Keys.D)) {
-            localPlayerVelocity.set(right).nor();
+        if (!chatting) {
+            if (Gdx.input.isKeyPressed(Input.Keys.W) && Gdx.input.isKeyPressed(Input.Keys.A)) {
+                localPlayerVelocity.set(forward).add(right.scl(-1)).nor();
+            } else if (Gdx.input.isKeyPressed(Input.Keys.W) && Gdx.input.isKeyPressed(Input.Keys.D)) {
+                localPlayerVelocity.set(forward).add(right).nor();
+            } else if (Gdx.input.isKeyPressed(Input.Keys.S) && Gdx.input.isKeyPressed(Input.Keys.D)) {
+                localPlayerVelocity.set(forward).add(right.scl(-1)).nor().scl(-1);
+            } else if (Gdx.input.isKeyPressed(Input.Keys.S) && Gdx.input.isKeyPressed(Input.Keys.A)) {
+                localPlayerVelocity.set(forward).add(right).nor().scl(-1);
+            } else if (Gdx.input.isKeyPressed(Input.Keys.W)) {
+                localPlayerVelocity.set(forward).nor();
+            } else if (Gdx.input.isKeyPressed(Input.Keys.S)) {
+                localPlayerVelocity.set(forward).nor().scl(-1);
+            } else if (Gdx.input.isKeyPressed(Input.Keys.A)) {
+                localPlayerVelocity.set(right).nor().scl(-1);
+            } else if (Gdx.input.isKeyPressed(Input.Keys.D)) {
+                localPlayerVelocity.set(right).nor();
+            }
+
+            command.shoot = Gdx.input.isKeyPressed(Input.Buttons.LEFT) || Gdx.input.isKeyPressed(Input.Buttons.RIGHT);
+            command.jump = Gdx.input.isKeyPressed(Input.Keys.SPACE);
+
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER) || Gdx.input.isKeyJustPressed(Input.Keys.T)) {
+                chatText = "";
+                chatting = true;
+            }
+        } else {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
+                command.chat = chatText;
+
+                chatText = "";
+                chatting = false;
+            }
         }
 
         localPlayerDirection.set(perspectiveCamera.direction);
@@ -228,11 +258,8 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
         localPlayerDirection.y = 0;
 
         // networking
-        UserCommand command = new UserCommand();
         command.velocity = localPlayerVelocity;
         command.direction = localPlayerDirection;
-        command.shoot = Gdx.input.isKeyPressed(Input.Buttons.LEFT) || Gdx.input.isKeyPressed(Input.Buttons.RIGHT);
-        command.jump = Gdx.input.isKeyPressed(Input.Keys.SPACE);
 
         if (!loading && socket.isOpen()) {
             socket.send(command);
@@ -261,12 +288,24 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
         modelBatch.end();
 
         spriteBatch.begin();
-        fontBlue.draw(spriteBatch, "hello", 0, fontBlue.getLineHeight());
+
+        if (chatting) {
+            fontBlue.draw(spriteBatch, "> " + chatText + "_", 0, fontBlue.getLineHeight());
+        }
+
+        if (chatLog.length() > 0) {
+            fontBlue.draw(spriteBatch, chatLog, 0, Gdx.graphics.getHeight());
+        }
+
+        float crosshairSize = 144 * Gdx.graphics.getWidth() / 2560;
+
+        spriteBatch.draw(crosshair, (Gdx.graphics.getWidth() - crosshairSize) / 2, (Gdx.graphics.getHeight() - crosshairSize) / 2, crosshairSize, crosshairSize);
         spriteBatch.end();
     }
 
     @Override
     public void resize(int width, int height) {
+        spriteBatch.getProjectionMatrix().setToOrtho2D(0, 0, width, height);
         perspectiveCamera.viewportWidth = width;
         perspectiveCamera.viewportHeight = height;
     }
@@ -297,6 +336,17 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
 
     @Override
     public boolean keyTyped(char character) {
+        if (chatting) {
+            if (character == 8 || character == 127) {
+                // backspace and delete
+                if (chatText.length() > 0) {
+                    chatText = chatText.substring(0, chatText.length() - 1);
+                }
+            } else {
+                chatText += character;
+            }
+        }
+
         return false;
     }
 
@@ -328,8 +378,8 @@ public class MyGdxGame implements ApplicationListener, InputProcessor {
 
     private void mouseLook() {
         if (Gdx.input.isCursorCatched()) {
-            float deltaX = -Gdx.input.getDeltaX() * 0.5f;
-            float deltaY = -Gdx.input.getDeltaY() * 0.5f;
+            float deltaX = -Gdx.input.getDeltaX() * 0.2f;
+            float deltaY = -Gdx.input.getDeltaY() * 0.2f;
             perspectiveCamera.direction.rotate(perspectiveCamera.up, deltaX);
             tmp.set(perspectiveCamera.direction).crs(perspectiveCamera.up).nor();
             perspectiveCamera.direction.rotate(tmp, deltaY);

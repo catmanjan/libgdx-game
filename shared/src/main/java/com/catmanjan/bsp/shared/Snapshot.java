@@ -9,11 +9,13 @@ import com.github.czyzby.websocket.serialization.impl.Serializer;
 public class Snapshot implements Transferable<Snapshot> {
 
     public String receiverId;
+    public String chat;
     public Array<Entity> entities;
 
     @Override
     public void serialize(Serializer serializer) throws SerializationException {
         serializer.serializeString(receiverId);
+        serializer.serializeString(chat);
         serializer.serializeInt(entities.size);
 
         for (Entity entity : entities) {
@@ -25,6 +27,7 @@ public class Snapshot implements Transferable<Snapshot> {
     public Snapshot deserialize(Deserializer deserializer) throws SerializationException {
         Snapshot snapshot = new Snapshot();
         snapshot.receiverId = deserializer.deserializeString();
+        snapshot.chat = deserializer.deserializeString();
 
         Entity[] entities = new Entity[deserializer.deserializeInt()];
 

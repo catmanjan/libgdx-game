@@ -12,6 +12,7 @@ public class UserCommand implements Transferable<UserCommand> {
     public Vector3 direction;
     public boolean shoot;
     public boolean jump;
+    public String chat;
 
     @Override
     public void serialize(Serializer serializer) throws SerializationException {
@@ -22,7 +23,8 @@ public class UserCommand implements Transferable<UserCommand> {
                 .serializeFloat(direction.y)
                 .serializeFloat(direction.z)
                 .serializeBoolean(shoot)
-                .serializeBoolean(jump);
+                .serializeBoolean(jump)
+                .serializeString(chat);
     }
 
     @Override
@@ -32,6 +34,7 @@ public class UserCommand implements Transferable<UserCommand> {
         userCommand.direction = new Vector3(deserializer.deserializeFloat(), deserializer.deserializeFloat(), deserializer.deserializeFloat());
         userCommand.shoot = deserializer.deserializeBoolean();
         userCommand.jump = deserializer.deserializeBoolean();
+        userCommand.chat = deserializer.deserializeString();
 
         return userCommand;
     }

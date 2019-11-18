@@ -1,7 +1,9 @@
 package com.catmanjan.bsp.server;
 
 import com.badlogic.gdx.math.Vector3;
+import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ObjectMap;
+import com.badlogic.gdx.utils.Queue;
 import com.catmanjan.bsp.shared.Constants;
 import com.catmanjan.bsp.shared.Entity;
 import com.catmanjan.bsp.shared.Snapshot;
@@ -20,7 +22,8 @@ public class ServerLauncher {
 
     private final Vertx vertx = Vertx.vertx();
     private final ManualSerializer serializer;
-    private final ObjectMap<ServerWebSocket, Entity> entities = new ObjectMap<>();
+    private final ObjectMap<ServerWebSocket, ServerEntity> serverEntities = new ObjectMap<>();
+    private final Queue<String> chatQueue = new Queue<>(6);
 
     private float playerSpeed = 2.0f;
     private Vector3 gravity = new Vector3(0, -0.3f, 0);
@@ -53,9 +56,9 @@ public class ServerLauncher {
     private void update() {
         float delta = Constants.TICK_INTERVAL / 100;
 
-        for (ObjectMap.Entry<ServerWebSocket, Entity> entry : entities) {
-            ServerWebSocket webSocket = entry.key;
-            Entity entity = entry.value;
+        // update all serverEntities
+        for (ObjectMap.Entry<ServerWebSocket, ServerEntity> entry : serverEntities) {
+            Entity entity = entry.value.entity;
 
             entity.velocity.add(gravity);
             tmp.set(entity.velocity);
@@ -70,12 +73,28 @@ public class ServerLauncher {
                     entity.velocity.y = 2f;
                 }
             }
+        }
 
+        StringBuilder snapshotChat = new StringBuilder();
+
+        for (String chat : chatQueue) {
+            snapshotChat.append(chat + "\n");
+        }
+
+        Array<Entity> snapshotEntities = new Array<>();
+
+        for (ServerEntity serverEntity : serverEntities.values()) {
+            snapshotEntities.add(serverEntity.entity);
+        }
+
+        // send to all serverEntities
+        for (ObjectMap.Entry<ServerWebSocket, ServerEntity> entry : serverEntities) {
             Snapshot snapshot = new Snapshot();
-            snapshot.receiverId = entity.id;
-            snapshot.entities = entities.values().toArray();
+            snapshot.receiverId = entry.value.entity.id;
+            snapshot.chat = snapshotChat.toString();
+            snapshot.entities = snapshotEntities;
 
-            webSocket.writeFinalBinaryFrame(Buffer.buffer(serializer.serialize(snapshot)));
+            entry.key.writeFinalBinaryFrame(Buffer.buffer(serializer.serialize(snapshot)));
         }
 
     }
@@ -83,12 +102,13 @@ public class ServerLauncher {
     private void handleFrame(final ServerWebSocket webSocket, final WebSocketFrame frame) {
         Entity entity;
 
-        synchronized (entities) {
-            if (entities.containsKey(webSocket)) {
-                entity = entities.get(webSocket);
+        synchronized (serverEntities) {
+            if (serverEntities.containsKey(webSocket)) {
+                entity = serverEntities.get(webSocket).entity;
             } else {
                 entity = new Entity();
                 entity.id = UUID.randomUUID().toString();
+                entity.name = "anonymous";
                 entity.position = new Vector3(0, 0, 0);
                 entity.direction = new Vector3();
                 entity.velocity = new Vector3();
@@ -96,8 +116,8 @@ public class ServerLauncher {
                 int blueTeamCount = 0;
                 int redTeamCount = 0;
 
-                for (Entity e : entities.values()) {
-                    if (e.team == 0) {
+                for (ServerEntity serverEntity : serverEntities.values()) {
+                    if (serverEntity.entity.team == 0) {
                         blueTeamCount++;
                     } else {
                         redTeamCount++;
@@ -108,7 +128,12 @@ public class ServerLauncher {
                     entity.team = 1;
                 }
 
-                entities.put(webSocket, entity);
+                ServerEntity serverEntity = new ServerEntity();
+                serverEntity.entity = entity;
+
+                serverEntities.put(webSocket, serverEntity);
+
+                chatQueue.addFirst(entity.name + " joined the game");
             }
         }
 
@@ -121,14 +146,35 @@ public class ServerLauncher {
             entity.direction = userCommand.direction;
             entity.jump = userCommand.jump;
             entity.shoot = userCommand.shoot;
+
+            String chat = userCommand.chat.trim();
+
+            if (chat.length() > 0) {
+                if (chat.startsWith("/name ")) {
+                    String name = chat.substring("/name ".length());
+
+                    if (name.length() > 0) {
+                        chatQueue.addFirst(entity.name + " renamed to " + name);
+                        entity.name = name;
+                    }
+                } else {
+                    chatQueue.addFirst(entity.name + ": " + chat);
+                }
+            }
         }
     }
 
     private void handleClose(final ServerWebSocket webSocket) {
-        synchronized (entities) {
-            if (entities.containsKey(webSocket)) {
-                entities.remove(webSocket);
+        synchronized (serverEntities) {
+            if (serverEntities.containsKey(webSocket)) {
+                serverEntities.remove(webSocket);
             }
         }
+    }
+
+    class ServerEntity {
+
+        Entity entity;
+
     }
 }

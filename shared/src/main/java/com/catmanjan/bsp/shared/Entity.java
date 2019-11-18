@@ -9,6 +9,7 @@ import com.github.czyzby.websocket.serialization.impl.Serializer;
 public class Entity implements Transferable<Entity> {
 
     public String id;
+    public String name;
     public Vector3 position;
     public Vector3 direction;
     public Vector3 velocity;
@@ -19,6 +20,7 @@ public class Entity implements Transferable<Entity> {
     @Override
     public void serialize(Serializer serializer) throws SerializationException {
         serializer.serializeString(id)
+                .serializeString(name)
                 .serializeFloat(position.x)
                 .serializeFloat(position.y)
                 .serializeFloat(position.z)
@@ -37,6 +39,7 @@ public class Entity implements Transferable<Entity> {
     public Entity deserialize(Deserializer deserializer) throws SerializationException {
         Entity entity = new Entity();
         entity.id = deserializer.deserializeString();
+        entity.name = deserializer.deserializeString();
         entity.position = new Vector3(deserializer.deserializeFloat(), deserializer.deserializeFloat(), deserializer.deserializeFloat());
         entity.direction = new Vector3(deserializer.deserializeFloat(), deserializer.deserializeFloat(), deserializer.deserializeFloat());
         entity.velocity = new Vector3(deserializer.deserializeFloat(), deserializer.deserializeFloat(), deserializer.deserializeFloat());
